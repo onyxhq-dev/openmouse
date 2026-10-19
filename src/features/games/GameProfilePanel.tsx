@@ -152,14 +152,18 @@ export function GameProfilePanel({
   // The cards edit whichever mouse is connected, so the draft only runs while
   // that is the profile's target. It ends when this panel closes, putting the
   // user's own unflashed device-page edits back.
+  // A write that is not ours restarts the draft once it is over. Apply now is
+  // ours: restarting there would clear the staged changes before the writer
+  // reads them (HITS writes nothing), so the draft stays open through it.
+  const busyElsewhere = snapshot.settingInProgress && !applying;
   useEffect(() => {
-    if (!loaded || !editing || snapshot.settingInProgress) return;
+    if (!loaded || !editing || busyElsewhere) return;
     const reopening = lastDraft.current !== null;
     if (!control.beginGameProfileDraft(lastDraft.current ?? savedRef.current)) return;
     adoptDraft.current = !reopening;
     return () => control.endGameProfileDraft();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, editing, target?.name, snapshot.settingInProgress]);
+  }, [loaded, editing, target?.name, busyElsewhere]);
 
   // Closing the page puts back what "Apply now" replaced, unless this game is
   // running: then its profile owns the mouse and the applier restores it later.

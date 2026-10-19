@@ -47,6 +47,23 @@ test("stored snapshots lose fields this build cannot apply", () => {
   assert.deepEqual(sanitizeSnapshot([1]), {});
 });
 
+test("HITS tuning is part of a game profile", () => {
+  const tuning = (actuation: number): MouseStatus["analogButtonTuning"] => ({
+    maxActuation: 10,
+    maxRapidTrigger: 10,
+    maxHaptics: 10,
+    buttons: [
+      { actuation, rapidTrigger: 2, haptics: 3, rapidTriggerEnabled: true },
+      { actuation: 4, rapidTrigger: 2, haptics: 3, rapidTriggerEnabled: false },
+    ],
+  });
+  const before = status({ analogButtonTuning: tuning(4) });
+  const after = status({ analogButtonTuning: tuning(7) });
+  assert.deepEqual(editableProfileFields(before, after), ["analogButtonTuning"]);
+  assert.deepEqual(snapshotDiff(before, after), { analogButtonTuning: tuning(7) });
+  assert.deepEqual(sanitizeSnapshot({ analogButtonTuning: tuning(7) }), { analogButtonTuning: tuning(7) });
+});
+
 test("the comparison key ignores field order", () => {
   assert.equal(snapshotKey({ dpi: 800, pollingRateHz: 1000 }), snapshotKey({ pollingRateHz: 1000, dpi: 800 }));
   assert.notEqual(snapshotKey({ dpi: 800 }), snapshotKey({ dpi: 1600 }));

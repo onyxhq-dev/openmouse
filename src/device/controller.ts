@@ -1551,10 +1551,21 @@ export async function flashGameProfileSnapshot(
   const stash = stashPendingChanges();
   applyGameProfileSnapshot(snapshot);
   const staged = hasPendingChanges();
-  if (staged) await flashPendingChanges();
+  if (staged) {
+    gameProfileWriting = true;
+    try {
+      await flashPendingChanges();
+    } finally {
+      gameProfileWriting = false;
+    }
+  }
   restorePendingChanges(stash);
   return staged ? "written" : "unchanged";
 }
+
+// True while a game profile is being written, so writes that would also save to
+// the mouse's stored profile (HITS tuning) stay live-only.
+let gameProfileWriting = false;
 
 // What the mouse held before "Apply now" wrote the open draft to it, so closing
 // the profile can put it back.
@@ -1570,7 +1581,12 @@ export async function applyGameProfileDraftNow(): Promise<"written" | "busy"> {
   const before = pickSnapshot(latestDeviceStatus, gameProfileDraftSnapshot());
   // Values from before the first apply win, so a second apply still restores the originals.
   gameProfileRestore = mergeSnapshots(before, gameProfileRestore ?? {});
-  await flashStagedChanges();
+  gameProfileWriting = true;
+  try {
+    await flashStagedChanges();
+  } finally {
+    gameProfileWriting = false;
+  }
   return hasPendingChanges() ? "busy" : "written";
 }
 
@@ -1851,6 +1867,22 @@ export function applyGameProfileSnapshot(snapshot: GameProfileSnapshot): void {
     else applyDpiValue(s.dpi);
   }
   if (s.pollingRateHz != null) applyPollingRate(s.pollingRateHz);
+
+  // HITS tuning, one entry per primary button. The card shows what it was told,
+  // so it opens on the profile's values.
+  const hits = s.analogButtonTuning?.buttons;
+  const liveHits = status.analogButtonTuning?.buttons;
+  if (Array.isArray(hits) && hits.length === 2 && liveHits?.length === 2) {
+    analogTuning = {
+      mode: JSON.stringify(hits[0]) === JSON.stringify(hits[1]) ? "both" : "independent",
+      left: { ...hits[0] },
+      right: { ...hits[1] },
+      both: { ...hits[0] },
+    };
+    for (const button of [0, 1] as const) {
+      if (JSON.stringify(hits[button]) !== JSON.stringify(liveHits[button])) stageAnalogButton(button, { ...hits[button] });
+    }
+  }
 
   if (s.gamingSurfaceMode) applyGamingSurfaceMode(s.gamingSurfaceMode);
   if (s.lightforceSwitchMode) applyLightforceSwitchMode(s.lightforceSwitchMode);
@@ -4283,8 +4315,9 @@ async function writeStagedAnalogButtons(): Promise<void> {
   for (const entry of staged) await client.setAnalogButtonTuning(entry.button, entry);
   // Then the profile, which is what the mouse loads at power-on. Live values
   // alone are gone after a power cycle. Host mode and profiles that cannot be
-  // written keep the live-only behavior.
-  if (lastDeviceMode === "Onboard" && lastProfileFormat?.writable === true) {
+  // written keep the live-only behavior, and so does a game profile: it must
+  // never rewrite the mouse's stored profile each time a game starts or stops.
+  if (!gameProfileWriting && lastDeviceMode === "Onboard" && lastProfileFormat?.writable === true) {
     await client.persistAnalogButtonTuning(staged);
   }
   stagedAnalogButtons.clear();
@@ -4308,7 +4341,6 @@ function stageAnalogButton(button: 0 | 1, tuning: AnalogTuning): void {
 }
 
 export function applyLogitechAnalogButton(button: 0 | 1): void {
-  if (blockedByGameProfileDraft()) return;
   if (!logitechClient()) return;
   stageAnalogButton(button, button === 0 ? analogTuning.left : analogTuning.right);
 }
@@ -4435,7 +4467,6 @@ export function dismissMagneticCalibration(): void {
 }
 
 export function applyLogitechAnalogButtons(): void {
-  if (blockedByGameProfileDraft()) return;
   if (!logitechClient()) return;
   stageAnalogButton(0, analogTuning.both);
   stageAnalogButton(1, analogTuning.both);

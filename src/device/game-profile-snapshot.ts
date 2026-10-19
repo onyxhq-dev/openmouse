@@ -47,6 +47,7 @@ export const GAME_PROFILE_FIELDS = [
   "hiResScroll",
   "invertScroll",
   "thumbWheelInverted",
+  "analogButtonTuning",
   "hapticIntensity",
   "hapticEnabled",
   "hapticBatterySaving",

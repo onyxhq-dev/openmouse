@@ -64,6 +64,15 @@ test("HITS tuning is part of a game profile", () => {
   assert.deepEqual(sanitizeSnapshot({ analogButtonTuning: tuning(7) }), { analogButtonTuning: tuning(7) });
 });
 
+test("Host bunny hop is part of a game profile", () => {
+  const before = status({ hostBunnyHopMs: 0 });
+  const after = status({ hostBunnyHopMs: 100 });
+  assert.deepEqual(editableProfileFields(before, after), ["hostBunnyHopMs"]);
+  assert.deepEqual(snapshotDiff(before, after), { hostBunnyHopMs: 100 });
+  assert.deepEqual(pickSnapshot(before, { hostBunnyHopMs: 100 }), { hostBunnyHopMs: 0 });
+  assert.deepEqual(sanitizeSnapshot({ hostBunnyHopMs: 100 }), { hostBunnyHopMs: 100 });
+});
+
 test("the comparison key ignores field order", () => {
   assert.equal(snapshotKey({ dpi: 800, pollingRateHz: 1000 }), snapshotKey({ pollingRateHz: 1000, dpi: 800 }));
   assert.notEqual(snapshotKey({ dpi: 800 }), snapshotKey({ dpi: 1600 }));

@@ -451,6 +451,7 @@ const en = {
   "perf.bunnyTime": "Bunny hop time in milliseconds",
   "perf.bunnyReadonly": "This profile format has not been verified on hardware, so it is read-only.",
   "perf.bunnyNote": "Ignores the first scroll-wheel step unless a second one follows within this window, so a stray tick does not trigger a jump bound to the wheel. It does not affect clicks. {min}–{max} ms in steps of {step}.",
+  "perf.bunnyHostNote": "Applies live while the mouse is on the Host profile. The mouse can't report this setting back, so the value shown is the last one set here.",
   "perf.hybrid": "Hybrid",
   "perf.opticalOnly": "Optical only",
   "perf.lightforceMode": "LightForce switch mode",

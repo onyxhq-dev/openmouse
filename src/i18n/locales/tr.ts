@@ -382,6 +382,7 @@ export const tr: Record<I18nKey, string> = {
   "perf.bunnyTime": "Bunny hop süresi (milisaniye)",
   "perf.bunnyReadonly": "Bu profil biçimi donanımda doğrulanmadığı için salt okunurdur.",
   "perf.bunnyNote": "Bu süre içinde ikinci bir tekerlek adımı gelmezse ilk kaydırma tekerleği adımını yok sayar; böylece yanlışlıkla yapılan kaydırma, tekerleğe atanmış zıplamayı tetiklemez. Tıklamaları etkilemez. {step} adımlarla {min}–{max} ms.",
+  "perf.bunnyHostNote": "Fare Host profilindeyken anında uygulanır. Fare bu ayarı geri bildirmez, bu yüzden gösterilen değer burada en son ayarlanandır.",
   "perf.hybrid": "Hibrit",
   "perf.opticalOnly": "Yalnızca optik",
   "perf.lightforceMode": "LightForce anahtar modu",

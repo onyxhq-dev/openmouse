@@ -1870,6 +1870,7 @@ export function applyGameProfileSnapshot(snapshot: GameProfileSnapshot): void {
     else applyDpiValue(s.dpi);
   }
   if (s.pollingRateHz != null) applyPollingRate(s.pollingRateHz);
+  if (typeof s.hostBunnyHopMs === "number") applyHostBunnyHopMs(s.hostBunnyHopMs);
 
   // HITS tuning, one entry per primary button. The card shows what it was told,
   // so it opens on the profile's values.
@@ -2723,6 +2724,9 @@ function applyStatusInner(deviceStatus: MouseStatus, statusKey?: string): void {
           + "last value applied here; this firmware does not expose a readable current-rate command.",
       },
     };
+  }
+  if (hostBunnyHopSupported(deviceStatus)) {
+    deviceStatus = { ...deviceStatus, hostBunnyHopMs: savedHostBunnyHopMs() };
   }
   latestDeviceStatus = deviceStatus;
   latestDiagnosticStatus = deviceStatus;
@@ -5471,6 +5475,74 @@ export function applyBunnyHopMs(milliseconds: number): void {
 }
 
 export { BUNNY_HOP_LIMITS };
+
+const HOST_BUNNY_HOP_STORAGE_KEY = "openmouse.host-bunny-hop";
+const HOST_BUNNY_HOP_KEY = "logitech-host-bunny-hop";
+
+/** Whether the mouse has a Host mode bunny hop setting (the profile format that has bunny hop). */
+export function hostBunnyHopSupported(status: MouseStatus | null): boolean {
+  return status?.brand === "Logitech" && capabilitiesForFormat(status.onboardProfileFormat?.id).bunnyHop;
+}
+
+function hostBunnyHopStore(): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(HOST_BUNNY_HOP_STORAGE_KEY) ?? "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The Host bunny hop time last written to this mouse. The mouse cannot report it
+ * back, and G HUB itself starts a Host session at off, so unknown reads as off.
+ */
+function savedHostBunnyHopMs(): number {
+  const value = activeDevice ? hostBunnyHopStore()[deviceStorageKey(activeDevice)] : undefined;
+  return typeof value === "number" && validateBunnyHoppingMs(value) === null ? value : 0;
+}
+
+function saveHostBunnyHopMs(milliseconds: number): void {
+  if (!activeDevice) return;
+  try {
+    localStorage.setItem(
+      HOST_BUNNY_HOP_STORAGE_KEY,
+      JSON.stringify({ ...hostBunnyHopStore(), [deviceStorageKey(activeDevice)]: milliseconds }),
+    );
+  } catch {
+    // Storage can be blocked; the value then reads as off after a refresh.
+  }
+}
+
+/** Sets bunny hop while the mouse runs from software (the Host profile); 0 turns it off. */
+export function applyHostBunnyHopMs(milliseconds: number): void {
+  if (!logitechClient()) return;
+  const invalid = validateBunnyHoppingMs(milliseconds);
+  if (invalid) {
+    setReadStatus(invalid);
+    return;
+  }
+  stageChange({
+    key: HOST_BUNNY_HOP_KEY,
+    label: milliseconds === 0 ? "Bunny hop off" : `Bunny hop ${milliseconds} ms`,
+    command: `Set Host mode bunny hop to ${milliseconds} ms`,
+    progress: milliseconds === 0 ? "Turning bunny hop off…" : `Setting bunny hop to ${milliseconds} ms…`,
+    preview: (status) => { status.hostBunnyHopMs = milliseconds; },
+    apply: async () => {
+      const client = logitechClient();
+      if (!client) throw new Error(st("ctl.gone"));
+      // The setting only exists while the mouse runs from software. A game
+      // profile that carries it is left unapplied on a mouse on an onboard
+      // profile rather than failing the rest of the profile.
+      if (lastDeviceMode !== "Host") {
+        recordDiagnosticCommand("Bunny hop skipped: the mouse is not on the Host profile");
+        return;
+      }
+      await client.setHostBunnyHopMs(milliseconds);
+      saveHostBunnyHopMs(milliseconds);
+    },
+  });
+}
 
 export function profileReportRateOptions(link: "wireless" | "wired"): number[] {
   const format = lastProfileFormat;

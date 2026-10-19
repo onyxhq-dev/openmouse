@@ -394,6 +394,7 @@ export const fr: Record<I18nKey, string> = {
   "perf.bunnyTime": "Durée du bunny hop en millisecondes",
   "perf.bunnyReadonly": "Ce format de profil n'a pas été vérifié sur du matériel réel, il est donc en lecture seule.",
   "perf.bunnyNote": "Ignore le premier cran de la molette sauf si un second suit dans cette fenêtre, pour qu'un cran accidentel ne déclenche pas un saut assigné à la molette. N'affecte pas les clics. {min}–{max} ms par pas de {step}.",
+  "perf.bunnyHostNote": "S'applique en direct tant que la souris est sur le profil Host. La souris ne renvoie pas ce réglage : la valeur affichée est la dernière définie ici.",
   "perf.hybrid": "Hybride",
   "perf.opticalOnly": "Optique uniquement",
   "perf.lightforceMode": "Mode switch LightForce",

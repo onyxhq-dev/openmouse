@@ -394,6 +394,7 @@ export const es: Record<I18nKey, string> = {
   "perf.bunnyTime": "Tiempo de bunny hop en milisegundos",
   "perf.bunnyReadonly": "Este formato de perfil no se ha verificado en hardware, así que es de solo lectura.",
   "perf.bunnyNote": "Ignora el primer paso de la rueda de desplazamiento salvo que llegue otro dentro de esta ventana, para que un toque accidental no active un salto asignado a la rueda. No afecta a los clics. {min}–{max} ms en pasos de {step}.",
+  "perf.bunnyHostNote": "Se aplica en directo mientras el ratón está en el perfil Host. El ratón no informa de este ajuste, así que el valor mostrado es el último que se fijó aquí.",
   "perf.hybrid": "Híbrido",
   "perf.opticalOnly": "Solo óptico",
   "perf.lightforceMode": "Modo de switch LightForce",

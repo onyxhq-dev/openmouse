@@ -394,6 +394,7 @@ export const ko: Record<I18nKey, string> = {
   "perf.bunnyTime": "버니 홉 시간(밀리초)",
   "perf.bunnyReadonly": "이 프로필 형식은 하드웨어에서 검증되지 않아 읽기 전용입니다.",
   "perf.bunnyNote": "이 시간 안에 두 번째 휠 입력이 없으면 첫 번째 스크롤 휠 입력을 무시하여, 실수로 굴린 휠이 휠에 지정된 점프를 실행하지 않도록 합니다. 클릭에는 영향을 주지 않습니다. {min}–{max}ms, {step} 단위.",
+  "perf.bunnyHostNote": "마우스가 Host 프로필일 때 바로 적용됩니다. 마우스가 이 설정을 알려주지 않아서, 표시되는 값은 여기에서 마지막으로 설정한 값입니다.",
   "perf.hybrid": "하이브리드",
   "perf.opticalOnly": "광학 전용",
   "perf.lightforceMode": "LightForce 스위치 모드",

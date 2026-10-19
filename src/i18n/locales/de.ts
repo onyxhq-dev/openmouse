@@ -394,6 +394,7 @@ export const de: Record<I18nKey, string> = {
   "perf.bunnyTime": "Bunny-Hop-Zeit in Millisekunden",
   "perf.bunnyReadonly": "Dieses Profilformat wurde nicht auf Hardware verifiziert, daher ist es schreibgeschützt.",
   "perf.bunnyNote": "Ignoriert die erste Mausradraste, sofern innerhalb dieses Zeitfensters keine zweite folgt, damit eine versehentliche Raste keinen aufs Mausrad gelegten Sprung auslöst. Klicks sind nicht betroffen. {min}–{max} ms in Schritten von {step}.",
+  "perf.bunnyHostNote": "Wird live angewendet, solange die Maus im Host-Profil ist. Die Maus meldet diese Einstellung nicht zurück, daher zeigt der Wert den zuletzt hier gesetzten.",
   "perf.hybrid": "Hybrid",
   "perf.opticalOnly": "Nur optisch",
   "perf.lightforceMode": "LightForce-Switch-Modus",

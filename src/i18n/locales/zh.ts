@@ -394,6 +394,7 @@ export const zh: Record<I18nKey, string> = {
   "perf.bunnyTime": "连跳时间（毫秒）",
   "perf.bunnyReadonly": "此配置文件格式尚未在硬件上验证，因此为只读。",
   "perf.bunnyNote": "除非在此时间窗口内出现第二次滚轮输入，否则忽略第一次滚轮输入，避免误触滚轮触发绑定在滚轮上的跳跃。不影响点击。{min}–{max} 毫秒，步进 {step}。",
+  "perf.bunnyHostNote": "鼠标处于 Host 配置文件时立即生效。鼠标无法回报此设置，因此显示的是在这里最后设置的值。",
   "perf.hybrid": "混合模式",
   "perf.opticalOnly": "仅光学",
   "perf.lightforceMode": "LightForce 开关模式",

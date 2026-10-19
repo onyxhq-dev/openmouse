@@ -344,6 +344,7 @@ export const vi: Record<I18nKey, string> = {
   "perf.bunnyTime": "Thời gian bunny hop tính bằng mili giây",
   "perf.bunnyReadonly": "Định dạng profile này chưa được xác minh trên phần cứng nên chỉ có thể đọc.",
   "perf.bunnyNote": "Bỏ qua nấc cuộn đầu tiên của con lăn trừ khi có nấc thứ hai trong khoảng thời gian này, để một lần cuộn vô tình không kích hoạt lệnh nhảy gán cho con lăn. Không ảnh hưởng đến thao tác nhấp. {min}–{max} ms theo bước {step}.",
+  "perf.bunnyHostNote": "Áp dụng ngay khi chuột ở hồ sơ Host. Chuột không báo lại cài đặt này, nên giá trị hiển thị là giá trị gần nhất được đặt tại đây.",
   "perf.hybrid": "Hybrid",
   "perf.opticalOnly": "Chỉ quang học",
   "perf.lightforceMode": "Chế độ switch LightForce",

@@ -331,9 +331,8 @@ export function Superstrike({ snapshot }: { snapshot: ControlSnapshot }): ReactN
   if (!tuning || tuning.buttons.length !== 2) return null;
   const locale = snapshot.preferences.locale;
   const state = snapshot.analogTuning;
-  // With instant flash on, a step is written the moment it is picked, so there
-  // is nothing to apply. A game-profile draft stages instead of flashing.
-  // With instant flash on, every HITS step stages itself (a game profile draft included), so there is nothing to apply.
+  // With instant flash on, every HITS step stages itself (a game profile draft
+  // included), so there is nothing to apply.
   const showApply = !snapshot.preferences.instantFlash;
 
   return (

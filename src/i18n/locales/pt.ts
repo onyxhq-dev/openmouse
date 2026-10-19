@@ -394,6 +394,7 @@ export const pt: Record<I18nKey, string> = {
   "perf.bunnyTime": "Tempo de bunny hop em milissegundos",
   "perf.bunnyReadonly": "Este formato de perfil não foi verificado no hardware, então é somente leitura.",
   "perf.bunnyNote": "Ignora o primeiro passo da roda de rolagem, a menos que outro venha dentro desta janela, para que um toque acidental não acione um pulo atribuído à roda. Não afeta os cliques. {min}–{max} ms em passos de {step}.",
+  "perf.bunnyHostNote": "É aplicado na hora enquanto o mouse está no perfil Host. O mouse não informa essa configuração, então o valor mostrado é o último definido aqui.",
   "perf.hybrid": "Híbrido",
   "perf.opticalOnly": "Somente óptico",
   "perf.lightforceMode": "Modo de switch LightForce",

@@ -63,7 +63,7 @@ function HostProfileNotice({ snapshot }: { snapshot: ControlSnapshot }): ReactNo
     <div id="logitech-button-map">
       <article className="setting-card superstrike-tuning-card button-map-card button-map-host">
         <div className="setting-heading superstrike-tuning-heading"><div><h2>{displayText(__uiLocale, "Button assignments")}</h2></div></div>
-        <p className="setting-description"> {displayText(__uiLocale, "You are on the Host profile, which runs from software. Button assignments and Bunny Hop are stored in the mouse's onboard profiles, so open one to edit them.")} </p>
+        <p className="setting-description"> {displayText(__uiLocale, "You are on the Host profile, which runs from software. Button assignments are stored in the mouse's onboard profiles, so open one to edit them. Bunny hop is set on this profile.")} </p>
         {target ? (
           <button type="button" className="connect-button" onClick={() => control.openOnboardProfile(target.sector)}> {displayText(__uiLocale, "Open")} {control.describeProfileEntry(target).name}
           </button>

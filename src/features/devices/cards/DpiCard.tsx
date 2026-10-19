@@ -14,6 +14,8 @@ import { LiftOffDistance, hasLiftOff } from "./PerformanceCards";
 import { IconLinked, IconUnlinked } from "../../../shared/icons";
 
 const MAX_EDITOR_ROWS = 4;
+/** G HUB's Host profile has five DPI slots. */
+const MAX_HOST_ROWS = 5;
 const DEFAULT_LOD = 2;
 
 type StageRow = { enabled: boolean; value: string; valueY: string; lod: number; linked?: boolean };
@@ -63,7 +65,12 @@ function DpiStageEditor({
     && snapshot.capabilities?.dpiStageAxesWritable === true
     && Array.isArray(status?.dpiStagesY);
   const slotAxesEditable = mode === "logitech" && status?.supportsSeparateDpiAxes === true;
-  const showAxes = stageAxesEditable || slotAxesEditable;
+  // On the Host profile a Logitech mouse takes live X and Y DPI values, and the
+  // preset list has five rows like G HUB's.
+  const hostAxesEditable = mode === "generic" && snapshot.traits.logitech && status?.supportsSeparateDpiAxes === true;
+  const axesLinkable = slotAxesEditable || hostAxesEditable;
+  const showAxes = stageAxesEditable || slotAxesEditable || hostAxesEditable;
+  const genericRows = hostAxesEditable ? MAX_HOST_ROWS : MAX_EDITOR_ROWS;
   const stageColors = mode === "stage"
     ? status?.dpiStageColors ?? (isNoirKsnakeStatus(status) ? NOIR_DPI_STAGE_COLORS : null)
     : null;
@@ -75,7 +82,7 @@ function DpiStageEditor({
   const locked = mode === "logitech" ? snapshot.profile.slotsLocked : snapshot.settingsPending;
 
   const countCap = isLogitech ? (limits?.maxStages ?? 1) : stageEditor?.maxStages ?? 1;
-  const rowCap = mode === "generic" ? MAX_EDITOR_ROWS : countCap;
+  const rowCap = mode === "generic" ? genericRows : countCap;
 
   const initRows = (): StageRow[] => {
     if (mode === "logitech" && snapshot.dpiSlotPlan) {
@@ -102,9 +109,13 @@ function DpiStageEditor({
     const presets = dpiPresetValues(options);
     const ordered = [status?.dpi, ...presets.filter((value) => value !== status?.dpi)]
       .filter((value): value is number => typeof value === "number")
-      .slice(0, MAX_EDITOR_ROWS);
-    while (ordered.length < MAX_EDITOR_ROWS) ordered.push(ordered[ordered.length - 1] ?? 800);
-    return ordered.map((value) => ({ enabled: value === status?.dpi, value: String(value), valueY: String(value), lod: DEFAULT_LOD }));
+      .slice(0, genericRows);
+    while (ordered.length < genericRows) ordered.push(ordered[ordered.length - 1] ?? 800);
+    return ordered.map((value) => {
+      const active = value === status?.dpi;
+      const valueY = active && hostAxesEditable ? status?.dpiY ?? value : value;
+      return { enabled: active, value: String(value), valueY: String(valueY), lod: DEFAULT_LOD, linked: valueY === value };
+    });
   };
 
   const [rows, setRows] = useState<StageRow[]>(initRows);
@@ -156,7 +167,7 @@ function DpiStageEditor({
     ? (snapshot.dpiSlotPlan?.stages.map((stage) => `${stage.x}/${stage.y}`).join(",") ?? "-")
     : mode === "stage"
       ? `${status?.dpiStages?.join(",") ?? "-"}|${status?.dpiStagesY?.join(",") ?? "-"}`
-      : String(status?.dpi ?? 0);
+      : `${status?.dpi ?? 0}/${status?.dpiY ?? 0}`;
   const lastSigRef = useRef(sourceSig);
   useEffect(() => {
     if (sourceSig === lastSigRef.current) return;
@@ -236,6 +247,15 @@ function DpiStageEditor({
     const active = next.find((row) => row.enabled);
     if (!active) return;
     const snap = closestDpiOption(options, parseRow(active.value) ?? status?.dpi ?? 0);
+    if (hostAxesEditable) {
+      const snapY = snap === null ? null : closestDpiOption(options, parseRow(active.valueY) ?? snap);
+      if (snap === null || snapY === null) return;
+      if (snap !== status?.dpi || snapY !== (status?.dpiY ?? status?.dpi)) control.applyLogitechAxisDpi(snap, snapY);
+      const synced = next.map((row) => (row.enabled ? { ...row, value: String(snap), valueY: String(snapY) } : row));
+      setRows(synced);
+      rowsRef.current = synced;
+      return;
+    }
     if (snap !== null && (singleFillsStages ? stagesDifferFrom(snap) : snap !== status?.dpi)) {
       applySingleDpi(snap);
       const next2 = next.map((row) => (row.enabled ? { ...row, value: String(snap) } : row));
@@ -270,7 +290,8 @@ function DpiStageEditor({
       const selected = next.map((row, i) => (i === index ? { ...row, enabled: true } : { ...row, enabled: false }));
       setRows(selected);
       rowsRef.current = selected;
-      applySingleDpi(snap);
+      if (hostAxesEditable) control.applyLogitechAxisDpi(snap, closestDpiOption(options, parseRow(next[index].valueY) ?? snap) ?? snap);
+      else applySingleDpi(snap);
       touchedRef.current = Date.now();
       return;
     }
@@ -297,7 +318,7 @@ function DpiStageEditor({
   const setValue = (index: number, raw: string, delay?: number): void => {
     const value = raw.replace(/[^\d]/g, "");
     const next = rows.map((row, i) => (i === index
-      ? { ...row, value, valueY: slotAxesEditable && row.linked !== false ? value : row.valueY }
+      ? { ...row, value, valueY: axesLinkable && row.linked !== false ? value : row.valueY }
       : row));
     setRows(next);
     rowsRef.current = next;
@@ -397,7 +418,7 @@ function DpiStageEditor({
   const enabledCount = rows.filter((row) => row.enabled).length;
 
   return (
-    <div id="dpi-stage-editor" className={`dpi-editor mode-${mode}${slotAxesEditable ? " has-slot-axes" : ""}${showStageColors ? " has-m2nex-stage-colors" : ""}${showAxes ? " has-stage-axes" : ""}`}>
+    <div id="dpi-stage-editor" className={`dpi-editor mode-${mode}${axesLinkable ? " has-slot-axes" : ""}${showStageColors ? " has-m2nex-stage-colors" : ""}${showAxes ? " has-stage-axes" : ""}`}>
       <div className="dpi-editor-bar">
         <span className="dpi-editor-bar-label">
           {t(locale, mode === "logitech" ? "dpi.slotsInUse" : mode === "stage" ? "dpi.stagesInUse" : "dpi.presetsInUse")}
@@ -465,7 +486,7 @@ function DpiStageEditor({
                 onBlur={flushEdit}
                 onKeyDown={(event) => { if (event.key === "Enter") flushEdit(); }}
               />
-              {slotAxesEditable ? (
+              {axesLinkable ? (
                 <button
                   type="button"
                   className={`dpi-axis-lock${row.linked === false ? "" : " is-linked"}`}
@@ -487,7 +508,7 @@ function DpiStageEditor({
                   max={slider.max}
                   step={slider.step}
                   value={row.valueY}
-                  disabled={locked || (mode === "stage" && !stagesWritable) || (slotAxesEditable && row.linked !== false)}
+                  disabled={locked || (mode === "stage" && !stagesWritable) || (axesLinkable && row.linked !== false)}
                   onChange={(event) => {
                     const edit = inputEdit(event, row.valueY);
                     setValueY(index, edit.raw, edit.delay);

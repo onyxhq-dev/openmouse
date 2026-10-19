@@ -4627,10 +4627,10 @@ function hostDpiSlotsStore(): Record<string, unknown> {
   }
 }
 
+// Bridge hands out per-session device keys (hid-1, hid-2, ...) that can change
+// on every page load, so the slots are keyed by the mouse's identity instead.
 function hostDpiSlotsKey(): string | null {
-  if (!activeDevice) return null;
-  const bridge = activeDevice as HIDDevice & { openMouseTransport?: string; key?: string };
-  return bridge.openMouseTransport === "bridge" ? `bridge:${bridge.key ?? ""}` : deviceStorageKey(activeDevice);
+  return activeDevice ? deviceStorageKey(activeDevice) : null;
 }
 
 /** The Host DPI slots saved for this mouse, so a refresh keeps them in the order they were set up. */

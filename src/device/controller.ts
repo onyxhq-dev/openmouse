@@ -40,6 +40,8 @@ import {
   draftProfileSnapshot,
   editableProfileFields,
   matchingProfileFields,
+  mergeSnapshots,
+  pickSnapshot,
   type GameProfileSnapshot,
 } from "./game-profile-snapshot";
 import { deviceImage } from "../shared/device-images";
@@ -1554,6 +1556,40 @@ export async function flashGameProfileSnapshot(
   return staged ? "written" : "unchanged";
 }
 
+// What the mouse held before "Apply now" wrote the open draft to it, so closing
+// the profile can put it back.
+let gameProfileRestore: GameProfileSnapshot | null = null;
+
+/**
+ * Writes the open game profile draft to the mouse now, so it can be tried
+ * without launching the game. The draft stays open and the values it replaced
+ * are kept for `restoreGameProfileApply`. "busy" means nothing was written.
+ */
+export async function applyGameProfileDraftNow(): Promise<"written" | "busy"> {
+  if (!gameProfileDraft || settingInProgress || !latestDeviceStatus || !hasPendingChanges()) return "busy";
+  const before = pickSnapshot(latestDeviceStatus, gameProfileDraftSnapshot());
+  // Values from before the first apply win, so a second apply still restores the originals.
+  gameProfileRestore = mergeSnapshots(before, gameProfileRestore ?? {});
+  await flashStagedChanges();
+  return hasPendingChanges() ? "busy" : "written";
+}
+
+/** Puts back what "Apply now" replaced; call once the draft has ended. */
+export async function restoreGameProfileApply(): Promise<void> {
+  const restore = gameProfileRestore;
+  gameProfileRestore = null;
+  if (!restore) return;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (await flashGameProfileSnapshot(restore) !== "busy") return;
+    await wait(500);
+  }
+}
+
+/** Drops the saved values without writing them (the game is running and its profile now owns the mouse). */
+export function forgetGameProfileApply(): void {
+  gameProfileRestore = null;
+}
+
 /** Writes that bypass staging must not reach the mouse while a game profile is being edited. */
 function blockedByGameProfileDraft(): boolean {
   if (!gameProfileDraft) return false;
@@ -2184,6 +2220,10 @@ async function flashPause(milliseconds = FLASH_STEP_DELAY_MS): Promise<void> {
 
 export async function flashPendingChanges(): Promise<void> {
   if (gameProfileDraft) return;
+  await flashStagedChanges();
+}
+
+async function flashStagedChanges(): Promise<void> {
   const batches = pendingChangeBatches();
   if (batches.length === 0) return;
   if (settingInProgress) {

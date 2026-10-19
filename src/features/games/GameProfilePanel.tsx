@@ -18,6 +18,7 @@ import * as control from "../../device/controller";
 import type { BridgeGame, BridgeProfile } from "../bridge/bridge";
 import { bridgeProfiles, saveBridgeProfiles } from "../bridge/bridge";
 import { subscribeBridgeHidActive } from "../bridge/bridge-hid";
+import { subscribeBridgeStatus } from "../bridge/bridge-status-store";
 import { fetchGamesCatalog, gameArtwork, type CatalogGame } from "./games-catalog";
 import { snapshotKey, type GameProfileSnapshot } from "../../device/game-profile-snapshot";
 import type { ControlSnapshot, SidebarDevice, ToastKind, WorkspaceTab } from "../../device/types";
@@ -91,6 +92,7 @@ export function GameProfilePanel({
   const [autoApply, setAutoApply] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [tab, setTab] = useState<WorkspaceTab>("performance");
   // The profile as Bridge last stored it; the draft opens on these values.
   const savedRef = useRef<GameProfileSnapshot>({});
@@ -158,6 +160,18 @@ export function GameProfilePanel({
     return () => control.endGameProfileDraft();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, editing, target?.name, snapshot.settingInProgress]);
+
+  // Closing the page puts back what "Apply now" replaced, unless this game is
+  // running: then its profile owns the mouse and the applier restores it later.
+  const gameRunning = useRef(false);
+  useEffect(() => subscribeBridgeStatus((bridge) => {
+    gameRunning.current = bridge?.activeProfile != null && matchesGame(bridge.activeProfile, game);
+  }), [game.name]);
+  useEffect(() => () => {
+    if (gameRunning.current) control.forgetGameProfileApply();
+    else void control.restoreGameProfileApply();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const draft = snapshot.gameProfileDraft ? control.gameProfileDraftSnapshot() : null;
   if (draft !== null) lastDraft.current = draft;
@@ -260,6 +274,17 @@ export function GameProfilePanel({
     void persist({ settings: {}, targetIndex, autoApply: false }, wasEnabled ? "disabled" : null);
   }
 
+  async function applyNow(): Promise<void> {
+    setApplying(true);
+    try {
+      if (await control.applyGameProfileDraftNow() === "written") {
+        control.pushToast("success", t(locale, "games.appliedNow"), t(locale, "games.appliedNowDetail"));
+      }
+    } finally {
+      setApplying(false);
+    }
+  }
+
   const artwork = catalogEntry ? gameArtwork(catalogEntry) : null;
   const tabs = editing
     ? availableWorkspaceTabs(true, cardAvailability(snapshot)).filter((entry) => GAME_PROFILE_TABS.includes(entry))
@@ -294,12 +319,20 @@ export function GameProfilePanel({
                   : tp(locale, "games.changedCount", { n: changedCount }))}
               </span>
             </div>
-            <button
-              type="button"
-              className="om-btn is-ghost game-profile-clear"
-              disabled={saving || (!autoApply && changedCount === 0)}
-              onClick={clearProfile}
-            >{t(locale, "cap.clear")}</button>
+            <div className="game-profile-actions">
+              <button
+                type="button"
+                className="om-btn"
+                disabled={applying || !snapshot.gameProfileDraft || snapshot.pending.keys.length === 0}
+                onClick={() => { void applyNow(); }}
+              >{t(locale, "games.applyNow")}</button>
+              <button
+                type="button"
+                className="om-btn is-ghost game-profile-clear"
+                disabled={saving || (!autoApply && changedCount === 0)}
+                onClick={clearProfile}
+              >{t(locale, "cap.clear")}</button>
+            </div>
           </div>
 
           <section className="game-profile-section">

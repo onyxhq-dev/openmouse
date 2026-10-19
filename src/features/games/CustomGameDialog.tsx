@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { saveBridgeCustomGames, type BridgeGame } from "../bridge/bridge";
+import { bridgeRunningApplications, saveBridgeCustomGames, type BridgeApplication, type BridgeGame } from "../bridge/bridge";
 import { t } from "../../i18n/index";
 import type { InterfaceLocale } from "../settings/interface-preferences";
+import { AppIcon } from "./GameRequestDialog";
 
 const MAX_NAME_LENGTH = 80;
+type Kind = "game" | "app";
 
 /** The game name a file name suggests: `my-game.exe` becomes `my-game`. */
 function suggestedName(fileName: string): string {
@@ -24,6 +26,8 @@ export function CustomGameDialog({ open, onClose, locale = "en", knownGames, cus
   const picker = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [exe, setExe] = useState("");
+  const [kind, setKind] = useState<Kind>("game");
+  const [apps, setApps] = useState<BridgeApplication[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -44,8 +48,27 @@ export function CustomGameDialog({ open, onClose, locale = "en", knownGames, cus
     if (!open) return;
     setName("");
     setExe("");
+    setKind("game");
+    setApps(null);
     setFailed(false);
   }, [open]);
+
+  async function loadRunningApps(): Promise<void> {
+    try {
+      const list = await bridgeRunningApplications();
+      setApps(list
+        .filter((app) => app.executable)
+        .sort((a, b) => Number(b.foreground) - Number(a.foreground) || a.name.localeCompare(b.name)));
+    } catch {
+      setApps([]);
+    }
+  }
+
+  function pickApp(app: BridgeApplication): void {
+    setExe(app.executable);
+    if (!name.trim()) setName(app.name.slice(0, MAX_NAME_LENGTH));
+    setApps(null);
+  }
 
   const trimmedName = name.trim();
   const duplicate = knownGames.some((game) =>
@@ -93,6 +116,21 @@ export function CustomGameDialog({ open, onClose, locale = "en", knownGames, cus
 
         <p className="feedback-description">{t(locale, "customgame.description")}</p>
 
+        <div className="segmented gamereq-kind" role="radiogroup" aria-label={t(locale, "gamereq.kindLabel")}>
+          {(["game", "app"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={kind === key}
+              className={kind === key ? "is-active selected" : ""}
+              onClick={() => setKind(key)}
+            >
+              {t(locale, key === "game" ? "gamereq.kindGame" : "gamereq.kindApp")}
+            </button>
+          ))}
+        </div>
+
         <div className="gamereq-exe">
           <input
             ref={picker}
@@ -109,7 +147,29 @@ export function CustomGameDialog({ open, onClose, locale = "en", knownGames, cus
           <button type="button" className="om-btn" onClick={() => picker.current?.click()}>
             {t(locale, "customgame.choose")}
           </button>
+          <button type="button" className="om-btn is-sm gamereq-chip" onClick={() => { void loadRunningApps(); }}>
+            {t(locale, "gamereq.pickRunning")}
+          </button>
           {exe ? <code className="gamereq-mono">{exe}</code> : null}
+          {apps !== null ? (
+            apps.length === 0 ? (
+              <p className="gamereq-hint">{t(locale, "gamereq.noRunning")}</p>
+            ) : (
+              <ul className="gamereq-apps">
+                {apps.map((app) => (
+                  <li key={app.path || app.executable}>
+                    <button type="button" onClick={() => pickApp(app)}>
+                      <AppIcon app={app} />
+                      <span>
+                        <strong>{app.name}</strong>
+                        <small className="gamereq-mono">{app.executable}</small>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : null}
         </div>
 
         <label className="feedback-handle" htmlFor="customgame-name">
@@ -119,6 +179,7 @@ export function CustomGameDialog({ open, onClose, locale = "en", knownGames, cus
             type="text"
             required
             maxLength={MAX_NAME_LENGTH}
+            placeholder={t(locale, kind === "game" ? "gamereq.namePlaceholder" : "gamereq.appNamePlaceholder")}
             value={name}
             onChange={(event) => setName(event.currentTarget.value)}
           />

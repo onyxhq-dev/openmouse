@@ -1551,6 +1551,7 @@ export async function flashGameProfileSnapshot(
   const stash = stashPendingChanges();
   applyGameProfileSnapshot(snapshot);
   const staged = hasPendingChanges();
+  recordDiagnosticCommand(`Game profile: write ${Object.keys(snapshot).join(", ") || "nothing"} (staged ${staged})`);
   if (staged) {
     gameProfileWriting = true;
     try {
@@ -1579,6 +1580,7 @@ let gameProfileRestore: GameProfileSnapshot | null = null;
 export async function applyGameProfileDraftNow(): Promise<"written" | "busy"> {
   if (!gameProfileDraft || settingInProgress || !latestDeviceStatus || !hasPendingChanges()) return "busy";
   const before = pickSnapshot(latestDeviceStatus, gameProfileDraftSnapshot());
+  recordDiagnosticCommand(`Game profile: apply now (replacing ${Object.keys(before).join(", ") || "nothing"})`);
   // Values from before the first apply win, so a second apply still restores the originals.
   gameProfileRestore = mergeSnapshots(before, gameProfileRestore ?? {});
   gameProfileWriting = true;
@@ -1595,6 +1597,7 @@ export async function restoreGameProfileApply(): Promise<void> {
   const restore = gameProfileRestore;
   gameProfileRestore = null;
   if (!restore) return;
+  recordDiagnosticCommand(`Game profile: restore ${JSON.stringify(restore)}`);
   for (let attempt = 0; attempt < 5; attempt += 1) {
     if (await flashGameProfileSnapshot(restore) !== "busy") return;
     await wait(500);
@@ -4312,6 +4315,7 @@ async function writeStagedAnalogButtons(): Promise<void> {
     return tuning && isPendingChange(`analog-button-${button}`) ? [{ button, ...tuning }] : [];
   });
   // Live first, so it takes effect at once.
+  recordDiagnosticCommand(`HITS write: ${JSON.stringify(staged)} (mode ${lastDeviceMode}, game profile write ${gameProfileWriting})`);
   for (const entry of staged) await client.setAnalogButtonTuning(entry.button, entry);
   // Then the profile, which is what the mouse loads at power-on. Live values
   // alone are gone after a power cycle. Host mode and profiles that cannot be

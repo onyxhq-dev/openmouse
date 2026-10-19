@@ -90,6 +90,20 @@ export async function bridgeGames(signal?: AbortSignal): Promise<BridgeGame[]> {
   return bridgeRequest<BridgeGame[]>("/v1/games", undefined, signal);
 }
 
+/** Games the user added by hand; `bridgeGames` already includes them. */
+export async function bridgeCustomGames(signal?: AbortSignal): Promise<BridgeGame[]> {
+  return bridgeRequest<BridgeGame[]>("/v1/custom-games", undefined, signal);
+}
+
+/** Replaces the custom games and returns the list as Bridge saved it. */
+export async function saveBridgeCustomGames(games: BridgeGame[]): Promise<BridgeGame[]> {
+  return bridgeRequest<BridgeGame[]>("/v1/custom-games", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(games),
+  });
+}
+
 export async function saveBridgeProfiles(profiles: BridgeProfile[]): Promise<void> {
   await bridgeRequest("/v1/profiles", {
     method: "PUT",

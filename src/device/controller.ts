@@ -4610,6 +4610,46 @@ export function unlinkedDpiSlots(): number[] {
   return Array.isArray(saved) ? saved : [];
 }
 
+const HOST_DPI_SLOTS_STORAGE_KEY = "openmouse.host-dpi-slots";
+export type HostDpiSlot = { x: number; y: number };
+
+function isHostDpiSlot(value: unknown): value is HostDpiSlot {
+  const slot = value as Partial<HostDpiSlot> | null;
+  return typeof slot === "object" && slot !== null && Number.isFinite(slot.x) && Number.isFinite(slot.y);
+}
+
+function hostDpiSlotsStore(): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(HOST_DPI_SLOTS_STORAGE_KEY) ?? "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function hostDpiSlotsKey(): string | null {
+  if (!activeDevice) return null;
+  const bridge = activeDevice as HIDDevice & { openMouseTransport?: string; key?: string };
+  return bridge.openMouseTransport === "bridge" ? `bridge:${bridge.key ?? ""}` : deviceStorageKey(activeDevice);
+}
+
+/** The Host DPI slots saved for this mouse, so a refresh keeps them in the order they were set up. */
+export function loadHostDpiSlots(): HostDpiSlot[] | null {
+  const key = hostDpiSlotsKey();
+  const saved = key ? hostDpiSlotsStore()[key] : undefined;
+  return Array.isArray(saved) && saved.length > 0 && saved.every(isHostDpiSlot) ? saved : null;
+}
+
+export function saveHostDpiSlots(slots: HostDpiSlot[]): void {
+  const key = hostDpiSlotsKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(HOST_DPI_SLOTS_STORAGE_KEY, JSON.stringify({ ...hostDpiSlotsStore(), [key]: slots }));
+  } catch {
+    // Storage can be blocked; the slots then simply reorder on refresh.
+  }
+}
+
 /** Replaces the whole unlinked list for the active device and profile. */
 export function replaceDpiUnlinkedSlots(indices: number[]): void {
   const key = dpiUnlinkKey();

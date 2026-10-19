@@ -106,6 +106,20 @@ function DpiStageEditor({
       while (rows.length < rowCap) rows.push({ enabled: false, value: String(last), valueY: String(last), lod: DEFAULT_LOD });
       return rows;
     }
+    const savedSlots = hostAxesEditable ? control.loadHostDpiSlots() : null;
+    if (savedSlots) {
+      // Keep the slots where the user put them; only the highlighted one follows the live DPI.
+      const slots = savedSlots.slice(0, genericRows);
+      while (slots.length < genericRows) slots.push({ ...(slots[slots.length - 1] ?? { x: status?.dpi ?? 800, y: status?.dpi ?? 800 }) });
+      const activeAt = slots.findIndex((slot) => slot.x === status?.dpi && slot.y === (status?.dpiY ?? status?.dpi));
+      return slots.map((slot, index) => ({
+        enabled: index === activeAt,
+        value: String(slot.x),
+        valueY: String(slot.y),
+        lod: DEFAULT_LOD,
+        linked: slot.x === slot.y,
+      }));
+    }
     const presets = dpiPresetValues(options);
     const ordered = [status?.dpi, ...presets.filter((value) => value !== status?.dpi)]
       .filter((value): value is number => typeof value === "number")
@@ -196,6 +210,18 @@ function DpiStageEditor({
   const parseRow = (raw: string): number | null =>
     /^\d+$/.test(raw.trim()) && Number(raw) > 0 ? Number(raw) : null;
 
+  // Remembers the Host slots in the order they are shown, snapped to values the mouse accepts.
+  const persistHostSlots = (list: StageRow[]): void => {
+    const snapped = (raw: string, fallback: number): number => {
+      const parsed = parseRow(raw) ?? fallback;
+      return closestDpiOption(options, parsed) ?? parsed;
+    };
+    control.saveHostDpiSlots(list.map((row) => {
+      const x = snapped(row.value, status?.dpi ?? 800);
+      return { x, y: snapped(row.valueY, x) };
+    }));
+  };
+
   const commit = (next: StageRow[]): void => {
     if (mode === "logitech") {
       // Lift-off lives in the slot plan itself now (edited from the dedicated
@@ -244,6 +270,7 @@ function DpiStageEditor({
       });
       return;
     }
+    if (hostAxesEditable) persistHostSlots(next);
     const active = next.find((row) => row.enabled);
     if (!active) return;
     const snap = closestDpiOption(options, parseRow(active.value) ?? status?.dpi ?? 0);
@@ -290,6 +317,7 @@ function DpiStageEditor({
       const selected = next.map((row, i) => (i === index ? { ...row, enabled: true } : { ...row, enabled: false }));
       setRows(selected);
       rowsRef.current = selected;
+      if (hostAxesEditable) persistHostSlots(selected);
       if (hostAxesEditable) control.applyLogitechAxisDpi(snap, closestDpiOption(options, parseRow(next[index].valueY) ?? snap) ?? snap);
       else applySingleDpi(snap);
       touchedRef.current = Date.now();

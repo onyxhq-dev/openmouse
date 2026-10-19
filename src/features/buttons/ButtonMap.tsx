@@ -10,9 +10,7 @@ import type { MouseStatus } from "@openmouse/protocol/drivers/mouse-types";
 import type { ControlSnapshot } from "../../device/types";
 import { buttonMapLayoutFor, type ButtonSpot } from "./logitech-button-map";
 import { COMMAND_SECTIONS, bindingFromKeyEvent, conflictHints, describeAssignment, isAssigned, shortcutText, type CommandEntry } from "./logitech-commands";
-import { connectionText } from "../../i18n/index";
 import { SetupCodeDialog } from "./SetupCodeDialog";
-import { BatteryIcon } from "../../shared/ui";
 
 type Layer = "primary" | "g-shift";
 
@@ -218,7 +216,6 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
 
   const status = snapshot.status;
   const entry = snapshot.profile.entry;
-  const estimate = status ? control.batteryEstimateParts(status, snapshot.preferences.locale) : null;
   const layout = status ? buttonMapLayoutFor(status.name) : null;
   if (!status || !(entry || host) || !layout) return onHostProfile(live) ? <HostProfileNotice snapshot={live} /> : null;
 
@@ -286,16 +283,6 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
       <article className="setting-card superstrike-tuning-card button-map-card">
         <div className="setting-heading superstrike-tuning-heading button-map-heading">
           <div><h2>{displayText(__uiLocale, "Button assignments")}</h2></div>
-          <div className="button-map-status" aria-label={displayText(__uiLocale, "Device status")}>
-            <strong>{status.name}</strong>
-            {status.connectionType ? <span>{displayText(__uiLocale, connectionText(snapshot.preferences.locale, status.connectionType))}</span> : null}
-            {status.batteryPercent !== null ? (
-              <span title={displayText(__uiLocale, estimate ? `${estimate.time} ${estimate.label}` : undefined)}>
-                <BatteryIcon percent={status.batteryPercent} state={status.batteryState} />{status.batteryPercent}%
-                {displayText(__uiLocale, estimate ? ` · ${estimate.time}` : "")}
-              </span>
-            ) : null}
-          </div>
           {host ? null : <button type="button" className="om-btn button-map-share" onClick={() => setSharing(true)}>{displayText(__uiLocale, "Share setup")}</button>}
         </div>
         {host ? null : <SetupCodeDialog open={sharing} snapshot={snapshot} onClose={() => setSharing(false)} />}

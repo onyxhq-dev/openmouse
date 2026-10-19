@@ -1,7 +1,9 @@
 import { displayText } from "../../i18n/index";
 import { matchesCommandQuery } from "./command-search";
 import { useUiLocale } from "../../shared/ui-locale";
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { bridgeDefaultProfile, saveBridgeDefaultProfile, type BridgeProfile } from "../bridge/bridge";
+import { isBridgeHidActive, subscribeBridgeHidActive } from "../bridge/bridge-hid";
 import * as control from "../../device/controller";
 import type { LogitechButtonAction } from "@openmouse/protocol/drivers/logitech/onboard-profiles";
 import type { MouseStatus } from "@openmouse/protocol/drivers/mouse-types";
@@ -25,13 +27,31 @@ const HOST_BUTTONS = [3, 4];
 const hostBit = (button: number): number => 1 << button;
 type HostAction = NonNullable<MouseStatus["hostButtons"]>[number];
 
-function inHostMode(snapshot: ControlSnapshot): boolean {
+function hostCapable(snapshot: ControlSnapshot): boolean {
   const status = snapshot.status;
-  return snapshot.gameProfileDraft
-    && snapshot.traits.logitech
+  return snapshot.traits.logitech
     && status !== null
     && control.hostBunnyHopSupported(status)
     && buttonMapLayoutFor(status.name) !== null;
+}
+
+/** Editing a game profile on a mouse that can hand its side buttons to Bridge. */
+function inHostMode(snapshot: ControlSnapshot): boolean {
+  return snapshot.gameProfileDraft && hostCapable(snapshot);
+}
+
+/**
+ * The Host profile page with Bridge running: assignments are saved as Bridge's
+ * default profile, used whenever no game's profile is active.
+ */
+function onHostPageWithBridge(snapshot: ControlSnapshot, bridgeActive: boolean): boolean {
+  return bridgeActive && !snapshot.gameProfileDraft && snapshot.editedProfile === "host" && hostCapable(snapshot);
+}
+
+function useBridgeRunning(): boolean {
+  const [active, setActive] = useState(isBridgeHidActive());
+  useEffect(() => subscribeBridgeHidActive(setActive), []);
+  return active;
 }
 
 /** Keyboard shortcuts and the media keys Bridge can press; macros and mouse commands are not offered. */
@@ -120,8 +140,49 @@ function HostProfileNotice({ snapshot }: { snapshot: ControlSnapshot }): ReactNo
 
 export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): ReactNode {
   const __uiLocale = useUiLocale();
-  const host = inHostMode(live);
+  const bridgeActive = useBridgeRunning();
+  const onHostPage = onHostPageWithBridge(live, bridgeActive);
+  const host = inHostMode(live) || onHostPage;
   const snapshot = host ? live : stableSnapshot(live) ?? live;
+  // On the Host profile the assignments are Bridge's default profile, read
+  // when the page opens and saved on every change.
+  const [saved, setSaved] = useState<NonNullable<MouseStatus["hostButtons"]>>({});
+  const savedProfile = useRef<BridgeProfile | null>(null);
+  useEffect(() => {
+    if (!onHostPage) return;
+    const controller = new AbortController();
+    void bridgeDefaultProfile(controller.signal).then((profile) => {
+      savedProfile.current = profile;
+      setSaved(profile?.settings.snapshot?.hostButtons ?? {});
+    }).catch(() => undefined);
+    return () => controller.abort();
+  }, [onHostPage, live.status?.name]);
+  const hostButtons = live.gameProfileDraft ? live.status?.hostButtons ?? {} : saved;
+  const setHostButton = (bit: number, action: HostAction | null): void => {
+    if (live.gameProfileDraft) {
+      control.applyHostButton(bit, action);
+      return;
+    }
+    const name = live.status?.name;
+    if (!name) return;
+    const next = { ...saved };
+    if (action) next[bit] = action;
+    else delete next[bit];
+    setSaved(next);
+    const base = savedProfile.current;
+    const profile: BridgeProfile = {
+      application: base?.application ?? { name: "Default", executable: "", path: "" },
+      device: { id: `Logitech:${name}`, name },
+      enabled: base?.enabled ?? true,
+      settings: {
+        dpi: base?.settings.dpi ?? null,
+        pollingRateHz: base?.settings.pollingRateHz ?? null,
+        snapshot: { ...(base?.settings.snapshot ?? {}), hostButtons: next },
+      },
+    };
+    savedProfile.current = profile;
+    void saveBridgeDefaultProfile(profile).catch(() => undefined);
+  };
   const [layer, setLayer] = useState<Layer>("primary");
   const [selected, setSelected] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -129,6 +190,8 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
   const [recording, setRecording] = useState(false);
   const [sharing, setSharing] = useState(false);
 
+  const setHostButtonRef = useRef(setHostButton);
+  setHostButtonRef.current = setHostButton;
   const recordable = selected !== null && !live.settingInProgress
     && (host ? HOST_BUTTONS.includes(selected) : !(selected <= 1 && layer === "primary"));
   useEffect(() => {
@@ -142,7 +205,7 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
       const binding = bindingFromKeyEvent(event);
       if (!binding || binding.kind !== "keyboard") return;
       if (host) {
-        control.applyHostButton(hostBit(selected), { key: binding.key, modifiers: binding.modifiers });
+        setHostButtonRef.current(hostBit(selected), { key: binding.key, modifiers: binding.modifiers });
       } else {
         void control.applyLogitechButtonAssignment(layer, selected, binding);
         setPending((previous) => ({ ...previous, [`${layer}-${selected}`]: shortcutText(binding.key, binding.modifiers) }));
@@ -163,7 +226,7 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
   const assignmentFor = (button: number) => assignments.find((assignment) => assignment.button === button);
   const isLocked = (spot: ButtonSpot): boolean => (host ? !HOST_BUTTONS.includes(spot.button) : spot.locked && layer === "primary");
   const textFor = (spot: ButtonSpot): string => {
-    if (host) return hostText(status.hostButtons?.[hostBit(spot.button)], spot.button);
+    if (host) return hostText(hostButtons[hostBit(spot.button)], spot.button);
     const staged = snapshot.stagedProfileButtonAssignments.find((item) => item.layer === layer && item.button === spot.button);
     if (staged) return pending[`${layer}-${spot.button}`] ?? "Pending";
     const assignment = assignmentFor(spot.button);
@@ -173,13 +236,13 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
   const selectedSpot = layout.spots.find((spot) => spot.button === selected) ?? null;
   const canAssign = selectedSpot !== null && !isLocked(selectedSpot) && !live.settingInProgress;
   const current = selected !== null ? assignmentFor(selected) : undefined;
-  const hostCurrent = host && selected !== null ? status.hostButtons?.[hostBit(selected)] : undefined;
+  const hostCurrent = host && selected !== null ? hostButtons[hostBit(selected)] : undefined;
 
   const assign = (command: CommandEntry): void => {
     if (!canAssign || selected === null) return;
     if (host) {
       const action = hostActionFor(command);
-      if (action) control.applyHostButton(hostBit(selected), action);
+      if (action) setHostButton(hostBit(selected), action);
       return;
     }
     const binding = command.target.kind === "action" ? command.target.action : command.target;
@@ -191,7 +254,7 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
   const reset = async (buttons: number[]): Promise<void> => {
     for (const button of buttons) {
       if (host) {
-        control.applyHostButton(hostBit(button), null);
+        setHostButton(hostBit(button), null);
         continue;
       }
       await control.applyLogitechButtonAssignment(layer, button, defaultFor(button));
@@ -214,7 +277,7 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
     ? "Pick a button on the mouse, then a command."
     : isLocked(selectedSpot)
       ? host
-        ? "Only the two side buttons can be changed in a game profile."
+        ? `Only the two side buttons can be changed ${onHostPage ? "on the Host profile" : "in a game profile"}.`
         : "Primary and secondary click are locked so you cannot lose control of the mouse."
       : `Pick a command for ${selectedSpot.label}.`;
 
@@ -260,6 +323,11 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
               <button type="button" disabled={live.settingInProgress} onClick={() => void reset(unlocked)}>{displayText(__uiLocale, "Reset all")}</button>
             </div>
             <small className="button-map-help" role="status">{displayText(__uiLocale, help)}</small>
+            {onHostPage ? (
+              <small className="button-map-help">
+                {displayText(__uiLocale, "Saved in Bridge and used whenever no game's profile is active, while the mouse is on the Host profile. A game's profile overrides it while that game runs.")}
+              </small>
+            ) : null}
             <div className="button-map-list">
             {sections.map((section) => (
               <section key={section.id} className="button-map-section">

@@ -22,6 +22,7 @@ import { Profiles } from "../profiles/Profiles";
 import { MagneticButtons } from "./MagneticButtons";
 import { Superstrike } from "../superstrike/Superstrike";
 import { ButtonMap, buttonMapAvailable } from "../buttons/ButtonMap";
+import { HostButtons } from "../buttons/HostButtons";
 import { DpiCard } from "./cards/DpiCard";
 import { KeyboardPanel } from "./cards/KeyboardPanel";
 import { FirmwareCard } from "./cards/FirmwareCard";
@@ -435,6 +436,8 @@ export function Workspace({
   const showNapeLayers = show(has.keychronNapeLayers, ["profiles"]);
   const showSuperstrike = show(has.superstrike, ["buttons"]);
   const showButtonMap = show(buttonMapAvailable(snapshot), ["buttons"]);
+  // Side button assignments exist only in a game profile: Bridge presses the keys while the game runs.
+  const showHostButtons = show(snapshot.gameProfileDraft && control.hostBunnyHopSupported(status), ["buttons"]);
   const showMagnetic = show(has.magnetic, ["buttons"]);
   const showLogitechDetails = device && show(has.logitechDetails, ["advanced"]);
   const showMxMaster = on(tab, ["advanced"])
@@ -472,7 +475,7 @@ export function Workspace({
       {showTeevolutionProfiles ? <TeevolutionProfileCard snapshot={snapshot} /> : null}
       {showNapeLayers ? <KeychronNapeLayers snapshot={snapshot} /> : null}
 
-      {performance.length > 0 || showSuperstrike || showButtonMap ? (
+      {performance.length > 0 || showSuperstrike || showButtonMap || showHostButtons ? (
         <section
           id="performance-settings"
           className={[
@@ -494,6 +497,7 @@ export function Workspace({
             {/* The HITS card keeps its own card chrome, first, beside the mouse panel. */}
             {showSuperstrike ? <Superstrike snapshot={snapshot} /> : null}
             {showButtonMap ? <ButtonMap snapshot={snapshot} /> : null}
+            {showHostButtons ? <HostButtons snapshot={snapshot} /> : null}
             {performance.length > 0 ? (
               <div className="performance-controls card-flow">
                 {slotCards(performance)}

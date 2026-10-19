@@ -64,6 +64,15 @@ test("HITS tuning is part of a game profile", () => {
   assert.deepEqual(sanitizeSnapshot({ analogButtonTuning: tuning(7) }), { analogButtonTuning: tuning(7) });
 });
 
+test("side button assignments are part of a game profile", () => {
+  const before = status({ hostButtons: {} });
+  const after = status({ hostButtons: { 16: { key: 0x68, modifiers: 0 }, 8: { key: 0x04, modifiers: 3 } } });
+  assert.deepEqual(editableProfileFields(before, after), ["hostButtons"]);
+  assert.deepEqual(snapshotDiff(before, after), { hostButtons: after.hostButtons });
+  assert.deepEqual(pickSnapshot(before, { hostButtons: after.hostButtons }), { hostButtons: {} }, "the prior is no assignments");
+  assert.deepEqual(sanitizeSnapshot({ hostButtons: after.hostButtons }), { hostButtons: after.hostButtons });
+});
+
 test("Host bunny hop is part of a game profile", () => {
   const before = status({ hostBunnyHopMs: 0 });
   const after = status({ hostBunnyHopMs: 100 });

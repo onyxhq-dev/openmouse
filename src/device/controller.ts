@@ -1871,6 +1871,7 @@ export function applyGameProfileSnapshot(snapshot: GameProfileSnapshot): void {
   }
   if (s.pollingRateHz != null) applyPollingRate(s.pollingRateHz);
   if (typeof s.hostBunnyHopMs === "number") applyHostBunnyHopMs(s.hostBunnyHopMs);
+  if (s.hostButtons && hostBunnyHopSupported(status)) stageHostButtons(s.hostButtons);
 
   // HITS tuning, one entry per primary button. The card shows what it was told,
   // so it opens on the profile's values.
@@ -2726,7 +2727,7 @@ function applyStatusInner(deviceStatus: MouseStatus, statusKey?: string): void {
     };
   }
   if (hostBunnyHopSupported(deviceStatus)) {
-    deviceStatus = { ...deviceStatus, hostBunnyHopMs: savedHostBunnyHopMs() };
+    deviceStatus = { ...deviceStatus, hostBunnyHopMs: savedHostBunnyHopMs(), hostButtons: {} };
   }
   latestDeviceStatus = deviceStatus;
   latestDiagnosticStatus = deviceStatus;
@@ -5512,6 +5513,31 @@ function saveHostBunnyHopMs(milliseconds: number): void {
   } catch {
     // Storage can be blocked; the value then reads as off after a refresh.
   }
+}
+
+const HOST_BUTTONS_KEY = "logitech-host-buttons";
+
+/** Stages the side button assignments a game profile carries (see MouseStatus.hostButtons). */
+function stageHostButtons(buttons: NonNullable<MouseStatus["hostButtons"]>): void {
+  stageChange({
+    key: HOST_BUTTONS_KEY,
+    label: "Side buttons",
+    command: "Set the side button assignments",
+    progress: "Saving the side button assignments…",
+    preview: (status) => { status.hostButtons = structuredClone(buttons); },
+    // Nothing is written to the mouse: Bridge presses these keys while the game
+    // runs, from the saved profile.
+    apply: async () => {},
+  });
+}
+
+/** Assigns a side button (bit 8 back, 16 front) a key and modifiers, or null for its normal click. */
+export function applyHostButton(bit: number, action: { key: number; modifiers: number } | null): void {
+  if (!latestDeviceStatus || !hostBunnyHopSupported(latestDeviceStatus)) return;
+  const next = { ...(withPendingChanges(latestDeviceStatus).hostButtons ?? {}) };
+  if (action) next[bit] = action;
+  else delete next[bit];
+  stageHostButtons(next);
 }
 
 /** Sets bunny hop while the mouse runs from software (the Host profile); 0 turns it off. */

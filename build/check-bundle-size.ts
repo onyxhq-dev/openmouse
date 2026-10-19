@@ -3,10 +3,10 @@ import { join } from "node:path";
 
 const BUDGET_BYTES: Record<string, number> = {
   ".css": 165_000,
-  // Raised from 2_800_000: custom games (dialog, Bridge calls) and the game
-  // profile Apply now button, with their strings in 12 languages. Measured
-  // 2_801_662 after the change.
-  ".js": 2_810_000,
+  // Raised from 2_800_000: custom games (dialog, Bridge calls), the game
+  // profile Apply now button, Host bunny hop and the side buttons card, with
+  // their strings in 12 languages. Measured 2_815_379 after the last change.
+  ".js": 2_825_000,
 };
 
 const ASSETS = join("dist", "assets");

@@ -333,7 +333,8 @@ export function Superstrike({ snapshot }: { snapshot: ControlSnapshot }): ReactN
   const state = snapshot.analogTuning;
   // With instant flash on, a step is written the moment it is picked, so there
   // is nothing to apply. A game-profile draft stages instead of flashing.
-  const showApply = !snapshot.preferences.instantFlash || snapshot.gameProfileDraft;
+  // With instant flash on, every HITS step stages itself (a game profile draft included), so there is nothing to apply.
+  const showApply = !snapshot.preferences.instantFlash;
 
   return (
     // A card in the Buttons tab's card list, so the mouse panel sits beside it.

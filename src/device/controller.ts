@@ -484,7 +484,7 @@ function buildProfileView(): ProfileView {
   const rates = lastProfileFormat
     ? reportRateCapabilitiesFor(lastProfileFormat.id, latestDeviceStatus?.transportIds?.USB)
     : null;
-  return {
+  const view: ProfileView = {
     entry,
     summary: describeProfileEntry(entry),
     slotsAvailable: dpiSlotsAvailable(),
@@ -500,6 +500,10 @@ function buildProfileView(): ProfileView {
     ratesLocked: lastProfileFormat?.writable !== true,
     bunnyHopSupported: bunnyHopSupported(),
   };
+  // A game profile holds live settings Bridge applies when the game starts,
+  // never the mouse's onboard flash. While one is edited, hide the stored-profile
+  // editors so DPI, lift-off and report rate show their live controls.
+  return gameProfileDraft ? { ...view, entry: null, slotsAvailable: false, bunnyHopSupported: false } : view;
 }
 
 let artworkKey: string | null = null;

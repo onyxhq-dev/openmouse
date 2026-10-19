@@ -4,6 +4,7 @@ import { useUiLocale } from "../../shared/ui-locale";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import * as control from "../../device/controller";
 import type { LogitechButtonAction } from "@openmouse/protocol/drivers/logitech/onboard-profiles";
+import type { MouseStatus } from "@openmouse/protocol/drivers/mouse-types";
 import type { ControlSnapshot } from "../../device/types";
 import { buttonMapLayoutFor, type ButtonSpot } from "./logitech-button-map";
 import { COMMAND_SECTIONS, bindingFromKeyEvent, conflictHints, describeAssignment, isAssigned, shortcutText, type CommandEntry } from "./logitech-commands";
@@ -16,6 +17,50 @@ type Layer = "primary" | "g-shift";
 
 /** What each unlocked button does out of the box; G-Shift starts with nothing on them. */
 const DEFAULT_ACTION: Record<number, CommandEntry["label"]> = { 2: "Middle click", 3: "Back", 4: "Forward" };
+
+// In a game profile the mouse runs from software and hands only its two side
+// buttons (numbers 3 and 4) to Bridge, which presses the saved key while the
+// game runs. Their bit in the mouse's button report is 1 << button.
+const HOST_BUTTONS = [3, 4];
+const hostBit = (button: number): number => 1 << button;
+type HostAction = NonNullable<MouseStatus["hostButtons"]>[number];
+
+function inHostMode(snapshot: ControlSnapshot): boolean {
+  const status = snapshot.status;
+  return snapshot.gameProfileDraft
+    && snapshot.traits.logitech
+    && status !== null
+    && control.hostBunnyHopSupported(status)
+    && buttonMapLayoutFor(status.name) !== null;
+}
+
+/** Keyboard shortcuts and the media keys Bridge can press; macros and mouse commands are not offered. */
+function hostSupported(command: CommandEntry): boolean {
+  return command.target.kind === "keyboard" || command.target.kind === "consumer";
+}
+
+function hostActionFor(command: CommandEntry): HostAction | null {
+  const target = command.target;
+  if (target.kind === "keyboard") return { key: target.key, modifiers: target.modifiers };
+  if (target.kind === "consumer") return { consumer: target.usage };
+  return null;
+}
+
+function hostText(action: HostAction | undefined, button: number): string {
+  if (!action) return DEFAULT_ACTION[button] ?? "-";
+  if ("key" in action) return shortcutText(action.key, action.modifiers);
+  const media = COMMAND_SECTIONS.flatMap((section) => section.entries)
+    .find((entry) => entry.target.kind === "consumer" && entry.target.usage === action.consumer);
+  return media?.label ?? `Media 0x${action.consumer.toString(16)}`;
+}
+
+function isHostAssigned(command: CommandEntry, action: HostAction | undefined): boolean {
+  const wanted = hostActionFor(command);
+  if (!wanted || !action) return false;
+  return "key" in wanted && "key" in action
+    ? wanted.key === action.key && wanted.modifiers === action.modifiers
+    : "consumer" in wanted && "consumer" in action && wanted.consumer === action.consumer;
+}
 
 function hasButtonMap(snapshot: ControlSnapshot): boolean {
   const status = snapshot.status;
@@ -52,7 +97,7 @@ function onHostProfile(snapshot: ControlSnapshot): boolean {
 }
 
 export function buttonMapAvailable(snapshot: ControlSnapshot): boolean {
-  return stableSnapshot(snapshot) !== null || onHostProfile(snapshot);
+  return stableSnapshot(snapshot) !== null || onHostProfile(snapshot) || inHostMode(snapshot);
 }
 
 function HostProfileNotice({ snapshot }: { snapshot: ControlSnapshot }): ReactNode {
@@ -75,7 +120,8 @@ function HostProfileNotice({ snapshot }: { snapshot: ControlSnapshot }): ReactNo
 
 export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): ReactNode {
   const __uiLocale = useUiLocale();
-  const snapshot = stableSnapshot(live) ?? live;
+  const host = inHostMode(live);
+  const snapshot = host ? live : stableSnapshot(live) ?? live;
   const [layer, setLayer] = useState<Layer>("primary");
   const [selected, setSelected] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -83,7 +129,8 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
   const [recording, setRecording] = useState(false);
   const [sharing, setSharing] = useState(false);
 
-  const recordable = selected !== null && !(selected <= 1 && layer === "primary") && !live.settingInProgress;
+  const recordable = selected !== null && !live.settingInProgress
+    && (host ? HOST_BUTTONS.includes(selected) : !(selected <= 1 && layer === "primary"));
   useEffect(() => {
     if (!recording || !recordable || selected === null) return;
     const onKey = (event: KeyboardEvent): void => {
@@ -94,24 +141,29 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
       }
       const binding = bindingFromKeyEvent(event);
       if (!binding || binding.kind !== "keyboard") return;
-      void control.applyLogitechButtonAssignment(layer, selected, binding);
-      setPending((previous) => ({ ...previous, [`${layer}-${selected}`]: shortcutText(binding.key, binding.modifiers) }));
+      if (host) {
+        control.applyHostButton(hostBit(selected), { key: binding.key, modifiers: binding.modifiers });
+      } else {
+        void control.applyLogitechButtonAssignment(layer, selected, binding);
+        setPending((previous) => ({ ...previous, [`${layer}-${selected}`]: shortcutText(binding.key, binding.modifiers) }));
+      }
       setRecording(false);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [recording, recordable, selected, layer]);
+  }, [recording, recordable, selected, layer, host]);
 
   const status = snapshot.status;
   const entry = snapshot.profile.entry;
   const estimate = status ? control.batteryEstimateParts(status, snapshot.preferences.locale) : null;
   const layout = status ? buttonMapLayoutFor(status.name) : null;
-  if (!status || !entry || !layout) return onHostProfile(live) ? <HostProfileNotice snapshot={live} /> : null;
+  if (!status || !(entry || host) || !layout) return onHostProfile(live) ? <HostProfileNotice snapshot={live} /> : null;
 
-  const assignments = layer === "primary" ? entry.buttonAssignments : entry.gShiftAssignments;
+  const assignments = entry ? (layer === "primary" ? entry.buttonAssignments : entry.gShiftAssignments) : [];
   const assignmentFor = (button: number) => assignments.find((assignment) => assignment.button === button);
-  const isLocked = (spot: ButtonSpot): boolean => spot.locked && layer === "primary";
+  const isLocked = (spot: ButtonSpot): boolean => (host ? !HOST_BUTTONS.includes(spot.button) : spot.locked && layer === "primary");
   const textFor = (spot: ButtonSpot): string => {
+    if (host) return hostText(status.hostButtons?.[hostBit(spot.button)], spot.button);
     const staged = snapshot.stagedProfileButtonAssignments.find((item) => item.layer === layer && item.button === spot.button);
     if (staged) return pending[`${layer}-${spot.button}`] ?? "Pending";
     const assignment = assignmentFor(spot.button);
@@ -121,9 +173,15 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
   const selectedSpot = layout.spots.find((spot) => spot.button === selected) ?? null;
   const canAssign = selectedSpot !== null && !isLocked(selectedSpot) && !live.settingInProgress;
   const current = selected !== null ? assignmentFor(selected) : undefined;
+  const hostCurrent = host && selected !== null ? status.hostButtons?.[hostBit(selected)] : undefined;
 
   const assign = (command: CommandEntry): void => {
     if (!canAssign || selected === null) return;
+    if (host) {
+      const action = hostActionFor(command);
+      if (action) control.applyHostButton(hostBit(selected), action);
+      return;
+    }
     const binding = command.target.kind === "action" ? command.target.action : command.target;
     void control.applyLogitechButtonAssignment(layer, selected, binding);
     setPending((previous) => ({ ...previous, [`${layer}-${selected}`]: command.label }));
@@ -132,6 +190,10 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
   const defaultFor = (button: number): LogitechButtonAction => (layer === "primary" ? DEFAULT_ACTION[button] : "Disabled") as LogitechButtonAction;
   const reset = async (buttons: number[]): Promise<void> => {
     for (const button of buttons) {
+      if (host) {
+        control.applyHostButton(hostBit(button), null);
+        continue;
+      }
       await control.applyLogitechButtonAssignment(layer, button, defaultFor(button));
       setPending((previous) => ({ ...previous, [`${layer}-${button}`]: defaultFor(button) }));
     }
@@ -143,14 +205,17 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
   const sections = COMMAND_SECTIONS
     .map((section) => ({
       ...section,
-      entries: section.entries.filter((command) => matchesCommandQuery(__uiLocale, query, command.label, command.hint)),
+      entries: section.entries.filter((command) => (!host || hostSupported(command))
+        && matchesCommandQuery(__uiLocale, query, command.label, command.hint)),
     }))
     .filter((section) => section.entries.length > 0);
 
   const help = selectedSpot === null
     ? "Pick a button on the mouse, then a command."
     : isLocked(selectedSpot)
-      ? "Primary and secondary click are locked so you cannot lose control of the mouse."
+      ? host
+        ? "Only the two side buttons can be changed in a game profile."
+        : "Primary and secondary click are locked so you cannot lose control of the mouse."
       : `Pick a command for ${selectedSpot.label}.`;
 
   return (
@@ -168,9 +233,9 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
               </span>
             ) : null}
           </div>
-          <button type="button" className="om-btn button-map-share" onClick={() => setSharing(true)}>{displayText(__uiLocale, "Share setup")}</button>
+          {host ? null : <button type="button" className="om-btn button-map-share" onClick={() => setSharing(true)}>{displayText(__uiLocale, "Share setup")}</button>}
         </div>
-        <SetupCodeDialog open={sharing} snapshot={snapshot} onClose={() => setSharing(false)} />
+        {host ? null : <SetupCodeDialog open={sharing} snapshot={snapshot} onClose={() => setSharing(false)} />}
         <div className="button-map-body">
           <aside className="button-map-commands" aria-label={displayText(__uiLocale, "Commands")}>
             <input
@@ -204,7 +269,7 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
                     key={command.id}
                     type="button"
                     className="button-map-command"
-                    aria-pressed={current ? isAssigned(command, current.action, current.raw) : false}
+                    aria-pressed={host ? isHostAssigned(command, hostCurrent) : current ? isAssigned(command, current.action, current.raw) : false}
                     disabled={!canAssign}
                     onClick={() => assign(command)}
                   >
@@ -241,10 +306,12 @@ export function ButtonMap({ snapshot: live }: { snapshot: ControlSnapshot }): Re
               ))}
             </div>
             {hints.length ? <ul className="button-map-hints" role="status">{hints.map((hint) => <li key={hint}>{displayText(__uiLocale, hint)}</li>)}</ul> : null}
-            <div className="button-map-layers" role="tablist" aria-label={displayText(__uiLocale, "Button layer")}>
-              <button type="button" role="tab" aria-selected={layer === "primary"} onClick={() => setLayer("primary")}>{displayText(__uiLocale, "Standard")}</button>
-              <button type="button" role="tab" aria-selected={layer === "g-shift"} onClick={() => setLayer("g-shift")}>{"G-Shift"}</button>
-            </div>
+            {host ? null : (
+              <div className="button-map-layers" role="tablist" aria-label={displayText(__uiLocale, "Button layer")}>
+                <button type="button" role="tab" aria-selected={layer === "primary"} onClick={() => setLayer("primary")}>{displayText(__uiLocale, "Standard")}</button>
+                <button type="button" role="tab" aria-selected={layer === "g-shift"} onClick={() => setLayer("g-shift")}>{"G-Shift"}</button>
+              </div>
+            )}
           </div>
         </div>
       </article>

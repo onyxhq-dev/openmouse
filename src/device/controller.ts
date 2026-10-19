@@ -5531,8 +5531,8 @@ function stageHostButtons(buttons: NonNullable<MouseStatus["hostButtons"]>): voi
   });
 }
 
-/** Assigns a side button (bit 8 back, 16 front) a key and modifiers, or null for its normal click. */
-export function applyHostButton(bit: number, action: { key: number; modifiers: number } | null): void {
+/** Assigns a side button (bit 8 back, 16 front) a key or media key, or null for its normal click. */
+export function applyHostButton(bit: number, action: NonNullable<MouseStatus["hostButtons"]>[number] | null): void {
   if (!latestDeviceStatus || !hostBunnyHopSupported(latestDeviceStatus)) return;
   const next = { ...(withPendingChanges(latestDeviceStatus).hostButtons ?? {}) };
   if (action) next[bit] = action;
